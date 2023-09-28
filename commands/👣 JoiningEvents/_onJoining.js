@@ -3,7 +3,7 @@
   help: 
   need_reply: 
   auto_retry_time: 
-  folder: 
+  folder: 👣 JoiningEvents
   answer: 
   keyboard: 
   aliases: 
@@ -14,4 +14,4 @@ if(!options){
   return
 }
 
-Bot.sendMessage( "Thank you for joining!");
+Bot.sendMessage( "Thank you for joining to: " + options.chat_id );
