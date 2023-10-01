@@ -1,10 +1,9 @@
 // 24443 - lib id
 
-let LIB_PREFIX = "MembershipChecker_";
+const LIB_PREFIX = "MembershipChecker_";
 
-function setupAdminPanel(){
-
-  let panel = {
+function _setupAdminPanel(){
+  const panel = {
     // Panel title
     title: "Membership checker options",
     description: "use these options to check your user channel membership",
@@ -31,17 +30,33 @@ function setupAdminPanel(){
       {
         name: "onNeedJoining",
         title: "onNeedJoining command",
-        description: "if the user does not have a membership, this command will be executed",
+        description: "if the user does not have a membership to ANY chat or channel, this command will be executed",
         type: "string",
         placeholder: "/onNeedJoining",
+        icon: "warning"
+      },
+      {
+        name: "onNeedAllJoining",
+        title: "onNeedAllJoining command",
+        description: "if the user does not have a membership to ALL chats and channels, this command will be executed",
+        type: "string",
+        placeholder: "/onNeedAllJoining",
         icon: "alert"
       },
       {
-        name: "onJoininig",
-        title: "onJoininig command",
-        description: "if the user just received a membership this command will be executed",
+        name: "onJoining",
+        title: "onJoining command",
+        description: "if the user just received a membership for ANY chat or channel this command will be executed",
         type: "string",
-        placeholder: "/onJoininig",
+        placeholder: "/onJoining",
+        icon: "person-add"
+      },
+      {
+        name: "onAllJoining",
+        title: "onAllJoining command",
+        description: "if the user just received a membership for ALL chats and channels this command will be executed",
+        type: "string",
+        placeholder: "/onAllJoining",
         icon: "happy"
       },
       {
@@ -78,28 +93,28 @@ function setupAdminPanel(){
 }
 
 function setup(){
-  setupAdminPanel();
+  _setupAdminPanel();
   Bot.sendMessage("MembershipChecker Panel: Setup - OK");
 }
 
-function getLibOptions(){
+function _getLibOptions(){
   return AdminPanel.getPanelValues("MembershipChecker");
 }
 
-function getUserData(){
+function _getUserData(){
   let userData = User.getProperty(LIB_PREFIX + "Data");
   if(!userData){ userData = { chats: {} } }
   if(!userData.chats){ userData.chats = {} }
   return userData;
 }
 
-function saveUserData(userData){
-  debugInfo("saveUserData: " + JSON.stringify(userData));
+function _saveUserData(userData){
+  _debugInfo("_saveUserData: " + JSON.stringify(userData));
   User.setProperty(LIB_PREFIX + "Data", userData, "json");
 }
 
-function debugInfo(info){
-  if(!getLibOptions().debug){ return }
+function _debugInfo(info){
+  if(!_getLibOptions().debug){ return }
   Api.sendMessage({
     text: "<b>MCLDebug</b>" +
     "\n <i>turn off debug in AdminPanel</i> " +
@@ -109,80 +124,96 @@ function debugInfo(info){
   })
 }
 
-function msgIncludes(subStr){
+function _msgIncludes(subStr){
   if(!subStr){ return false }
   if(subStr == ""){ return false }
 
   return message.includes(subStr)
 }
 
-function isInternalCommands(opts){
+function _isInternalCommands(opts){
   if(!message){ return false }
 
   return (
-    msgIncludes(LIB_PREFIX)||
-    msgIncludes(opts.onJoininig)||
-    msgIncludes(opts.onNeedJoining)||
-    msgIncludes(opts.onError)
+    _msgIncludes(LIB_PREFIX)||
+    _msgIncludes(opts.onJoining)||
+    _msgIncludes(opts.onAllJoining)||
+    _msgIncludes(opts.onNeedJoining)||
+    _msgIncludes(opts.onNeedAllJoining)||
+    _msgIncludes(opts.onError)
   )
 }
 
-function handle(passed_options){
+function _isHandleNeeded(){
   if(!user){ return }  // can check only for user
 
-  let opts = getLibOptions();
+  let opts = _getLibOptions();
   if(!opts.chats){
     throw new Error("MembershipChecker: please install chats for checking in Admin Panel");
   }
 
   // ignore internal commands
-  if(isInternalCommands(opts)){
-    debugInfo("ignore internal commands in handle()")
+  if(_isInternalCommands(opts)){
+    _debugInfo("ignore internal commands in handle()")
     return
   }
 
   if(completed_commands_count > 0){
-    debugInfo("handle can not be run on sub commands")
+    _debugInfo("handle can not be run on sub commands")
     return
   }
 
-  debugInfo("handle()")
+  return true;
+}
 
-  let lastCheckTime = getUserData().lastCheckTime;
-  if(!canRunHandleAgain(lastCheckTime, opts)){
-    // check is not needed now
-    debugInfo("Checking is not required since the delay time has not come yet.\nCurrent delay: " +
-      String(opts.checkTime) + " min" )
-    return
+function handle(passed_options){
+  if(!_isHandleNeeded()){ return }
+
+  _debugInfo("handle()")
+
+  let lastCheckTime = _getUserData().lastCheckTime;
+  const opts = _getLibOptions();
+  if(_canRunHandleAgain(lastCheckTime, opts)){
+    return check(passed_options, true);
   }
 
-  check(passed_options, true);
+  // check is not needed now
+  _debugInfo(
+    "Checking is not required since the delay time has not come yet.\nCurrent delay: " +
+      String(opts.checkTime) + " min"
+  )
+}
+
+function _isItSpamCall(lastCheckTime){
+  // only 1 check per 2 second for one user
+  if(lastCheckTime){
+    let duration = Date.now() - lastCheckTime;
+    return duration < 2000
+  }
+  return false
 }
 
 function check(passed_options, noNeedOnStillJoined){
-  let userData = getUserData();
+  let userData = _getUserData();
 
-  debugInfo("check() for user Data: " + JSON.stringify(userData));
+  _debugInfo("check() for user Data: " + JSON.stringify(userData));
 
-  // only 1 check per 2 second for one user
-  if(userData.sheduledAt){
-    let duration = Date.now() - userData.sheduledAt;
-    if(duration < 2000){ return }
-  }
+  if(_isItSpamCall(userData.lastCheckTime)){ return }
 
-  userData.sheduledAt = Date.now();
-  saveUserData(userData);
+  userData.lastCheckTime = Date.now();
+  _saveUserData(userData);
 
-  debugInfo("create task for checking");
+  _debugInfo("create task for checking");
 
   // create task for checking
   Bot.run({
     command: LIB_PREFIX + "checkMemberships",
     options: {
-      time: Date.now(),                                   // current time value for this checking
+      time: userData.lastCheckTime,                       // current time value for this checking
       needStillJoinedCallback: !noNeedOnStillJoined,      // if true - we need to call still joined callback
       bb_options: passed_options,                         // customized passed options
     },
+    // TODO: need decrease this time to 0.01
     run_after: 1                                          // just for run in background
   })
 }
@@ -200,18 +231,16 @@ function checkMembership(chat_id){
 }
 
 function getChats(){
-  let options = getLibOptions();
-  if(!options.chats){ return }
-  return options.chats
+  return _getLibOptions().chats;
 }
 
 function getNotJoinedChats(){
-  return _getNotJoinedChats().join(", ")
+  return _getNotJoinedChats().join(", ");
 }
 
 function checkMemberships(){
-  let chats = _getChats();
-  debugInfo("run checking for " + JSON.stringify(chats));
+  let chats = _getChatsArr();
+  _debugInfo("run checking for " + JSON.stringify(chats));
 
   for(let ind in chats){
     // several chats
@@ -219,145 +248,156 @@ function checkMemberships(){
     Bot.run({
       command: LIB_PREFIX + "checkMembership " + chat_id,
       options: options,          // passed options
-      run_after: 1,              // just for run in background
+      // TODO: need decrease this time to 0.01
+      run_after: 1              // just for run in background
     })
   }
 }
 
-function isJoined(response){
+// need remove?
+function _isJoined(response){
   let status = response.result.status;
   return ["member", "administrator", "creator"].includes(status);
 }
 
 
-function needStillJoinedCallback(userData) {
-  // all chats have same time - lastCheckTime
-  const lastCheckTime = options.bb_options.time;
-  return Object.values(userData.chats).every(
+function _isSameChatsCheckingTime(chats, needNegative){
+  let lastCheckTime = options.bb_options.time;
+  if(needNegative){ lastCheckTime = -lastCheckTime }
+  const sameTime = Object.values(chats).every(
     value => value === lastCheckTime
   );
+
+  return sameTime;
 }
 
-function proccessOldChat(userData){
-  // it is still joined chat
-  debugInfo("skip old chat");
+function _needStillJoinedCallback(userData) {
+  // we need callback only with check() method not in handle()
+  if(!options.bb_options.needStillJoinedCallback){ return false }
+  // callback must be installed
+  if(!_getLibOptions().onStillJoined){ return false }
 
-  let opts = getLibOptions();
+  return _isSameChatsCheckingTime(userData.chats);
+}
 
-  const needCallback = (
-    // we need callback only with check() method not in handle()
-    options.bb_options.needStillJoinedCallback&&
-    // all chats have same time - lastCheckTime
-    needStillJoinedCallback(userData)&&
-    // callback is installed
-    opts.onStillJoined
+function _runCallback(callbackName, chat_id){
+  const opts = _getLibOptions();
+  const command = opts[callbackName];
+
+  if(!command){
+    _debugInfo("callback is not installed: " + callbackName + ". Chat: " + chat_id +
+    "\n\n> " + JSON.stringify(options));
+    return false;
+  }
+
+  _debugInfo(
+    "run callback: " + callbackName + ">" + command + ", for chat: " + chat_id +
+    "\n\n> " + JSON.stringify(options)
   );
 
+  Bot.run({
+    command: command,
+    options: {
+      result: options.result,
+      bb_options: options.bb_options.passed_options,
+      chat_id: chat_id
+    }
+  })
+  return true;
+}
+
+function _proccessOldChat(userData){
+  // it is still joined chat
+  _debugInfo("skip old chat");
+
+  const needCallback = _needStillJoinedCallback(userData);
+
   if(!needCallback){
-    debugInfo("still joined callback is not needed: " + JSON.stringify(options));
+    _debugInfo("still joined callback is not needed: " + JSON.stringify(options));
     return true
   }
 
-  debugInfo("run still joined callback: " + opts.onStillJoined);
-
-  Bot.run({
-    command: opts.onStillJoined,
-    options: {
-      bb_options: options.bb_options.passed_options
-    }
-  })
-
-  return true
+  return _runCallback("onStillJoined");
 }
 
 function handleMembership(chat_id, userData){
-  const isOld = userData.chats[chat_id];
+  const checkTime = userData.chats[chat_id];
+  // we have negative time - it is not joined chat
+  const isOld = ( checkTime && checkTime > 0 );
 
   // we use same time - because need to track still joined callback
   userData.chats[chat_id] = options.bb_options.time;
 
   // skip old chats
   if(isOld){
-    proccessOldChat(userData)
-    saveUserData(userData);
+    _proccessOldChat(userData)
+    _saveUserData(userData);
     return
   }
 
   // we do not need stillJoinedCallback on new chat
   // set different time for new chat
   userData.chats[chat_id]+= 10;
-  saveUserData(userData);
+  _saveUserData(userData);
 
-  let opts = getLibOptions();
-  const needCallback = ( !isOld && opts.onJoininig);
+  let opts = _getLibOptions();
+  const needCallback = ( !isOld && opts.onJoining);
 
   if(!needCallback){
-    debugInfo(
-      "onJoininig callback is not needed: it is old joining in: " + chat_id +
+    _debugInfo(
+      "on Joining callbacks is not needed: it is old joining in: " + chat_id +
       "\n\n> " + JSON.stringify(userData)
     );
     return
   }
 
-  debugInfo("run onJoininig callback: " + opts.onJoininig + " for " + chat_id +
-    "\n\n> " + JSON.stringify(userData) + "\n\n> " + JSON.stringify(options)
-  );
+  _runCallback("onJoining", chat_id);
 
-  Bot.run({
-    command: opts.onJoininig,
-    options: {
-      bb_options: options.bb_options.passed_options
-    }
-  })
+  // is all chats joined?
+  if(isMember()){
+    return _runCallback("onAllJoining");
+  }
 }
 
-function handleNoneMembership(chat_id, userData){
-  let opts = getLibOptions();
+function _handleNoneMembership(chat_id, userData){
+  userData.chats[chat_id] = -options.bb_options.time  // we use negative time for not joined chats
+  _saveUserData(userData);
+  _runCallback("onNeedJoining", chat_id);
 
-  userData.chats[chat_id] = false
-  saveUserData(userData);
-
-  if(!opts.onNeedJoining){ return }  // no action
-
-  Bot.run({
-    command: opts.onNeedJoining,
-    options: {
-      chat_id: chat_id,
-      result: options.result,
-      bb_options: options.bb_options.passed_options
-    }
-  })
+  if(_needToJoinAll(userData.chats)){
+    _runCallback("onNeedAllJoining");
+  }
 }
 
 function onCheckMembership(){
   let chat_id = params.split(" ")[0];
 
-  let userData = getUserData();
+  let userData = _getUserData();
   userData.lastCheckTime = options.bb_options.time;
 
-  debugInfo("check response: " + JSON.stringify(options) + "\n\n> " + JSON.stringify(userData));
+  _debugInfo("check response: " + JSON.stringify(options) + "\n\n> " + JSON.stringify(userData));
 
-  if(isJoined(options)){
-    debugInfo("user is (still?) joined to " + chat_id + " chat")
+  if(_isJoined(options)){
+    _debugInfo("user is (still?) joined to " + chat_id + " chat")
     return handleMembership(chat_id, userData)
   }
 
-  return handleNoneMembership(chat_id, userData)
+  return _handleNoneMembership(chat_id, userData)
 }
 
 function onError(){
-  debugInfo("onError for " + params + " >" + JSON.stringify(options))
+  _debugInfo("onError for " + params + " >" + JSON.stringify(options))
 
-  let opts = getLibOptions();
+  let opts = _getLibOptions();
   if(!opts.onError){ return }  // no action
   opts.chat_id = params;
   Bot.run({ command: opts.onError, options: options })
 }
 
-function canRunHandleAgain(curTime){
+function _canRunHandleAgain(curTime){
   if(!curTime){ return false }
 
-  let options = getLibOptions();
+  let options = _getLibOptions();
   if(!options.checkTime){
     throw new Error("MembershipChecker: please install checking delay time in Admin Panel");
   }
@@ -368,20 +408,20 @@ function canRunHandleAgain(curTime){
   return duration > parseInt(options.checkTime);
 }
 
-function isActualMembership(chat_id){
+function _isActualMembership(chat_id){
   if(!chat_id){ return false }
 
-  let userData = getUserData()
-  return userData.chats[chat_id]
+  let userData = _getUserData()
+  return userData.chats[chat_id] > 0
 }
 
 function _getNotJoinedChats(){
   let result;
   let notJoined = [];
-  let chats = _getChats();
+  const chats = _getChatsArr();
 
   for(let ind in chats){
-    result = isActualMembership(chats[ind]);
+    result = _isActualMembership(chats[ind]);
     if(!result){
       notJoined.push(chats[ind])
     }
@@ -389,13 +429,31 @@ function _getNotJoinedChats(){
   return notJoined
 }
 
-function _getChats(needError){
-  let options = getLibOptions();
-
-  const error = "MembershipChecker: no chats for checking";
-  if(!options.chats){
-    if(needError){ throw new Error(error) }
+function _needToJoinAll(chats){
+  let result;
+  for(let ind in chats){
+    result = _isActualMembership(chats[ind]);
+    if(result){
+      return false;
+    }
   }
+
+  // same negative time for all chats
+  // we use negative time for not joined chats
+  // it will be in the end checking only
+  return _isSameChatsCheckingTime(chats, true);
+}
+
+function _throwErrorIfNoChats(){
+  if(_getLibOptions().chats){ return }
+
+  throw new Error("MembershipChecker: please install chats for checking in Admin Panel");
+}
+
+function _getChatsArr(needError){
+  let options = _getLibOptions();
+
+  if(!options.chats){ return [] }
 
   let chats = options.chats.split(" ").join(""); // remove spaces
   chats = chats.split(",");
@@ -404,19 +462,16 @@ function _getChats(needError){
   return chats
 }
 
-function _isChatsMember(){
-  _getChats(true)  // with error if no chats
-  return ( _getNotJoinedChats().length == 0 )
-}
-
 // is member of all chats?
 function isMember(chat_id){
   if(chat_id){
-    return isActualMembership(chat_id);
+    return _isActualMembership(chat_id);
   }
 
+  _throwErrorIfNoChats();
+
   // for all chats
-  return _isChatsMember()
+  return ( _getNotJoinedChats().length == 0 )
 }
 
 publish({

@@ -3,13 +3,13 @@
   help: 
   need_reply: 
   auto_retry_time: 
-  folder: 
+  folder: 🏠 Menu
   answer: 
   keyboard: 
   aliases: 
 CMD*/
 
-Bot.sendMessage("Soft cheking your membership");
+Bot.sendMessage("Soft cheking your membership.\n\nIt is quickly checking but works with delay and need `Libs.MembershipChecker.handle()` method");
 
 // It is soft quickly checking without delay
 // this method don't spend iterations

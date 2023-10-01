@@ -3,12 +3,12 @@
   help: 
   need_reply: 
   auto_retry_time: 
-  folder: 
+  folder: ⚙️ System
   answer: 
   keyboard: 
   aliases: 
 CMD*/
 
-return // just remove this line for setup
+//return // just remove this line for setup
 
 Libs.MembershipChecker.setup();
